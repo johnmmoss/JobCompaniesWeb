@@ -42,7 +42,7 @@ stages:
           - task: PublishPipelineArtifact@1
             displayName: "Publish Artifact (web)"
             inputs:
-              PathtoPublish: "$(build.artifactStagingDirectory)"
+              PathtoPublish: "$(build.artifactStagingDirectory)/web.zip"
               ArtifactName: "drop_web"
 
           - task: PublishPipelineArtifact@1
@@ -91,12 +91,17 @@ stages:
                     environmentServiceNameAzureRM: "$(serviceConnection)"
                     commandOptions: "-auto-approve"
 
-                - pwsh: |
-                    $appServiceName = terraform output -raw app_service_name
-                    Write-Host "App Service name: $appServiceName"
-                    Write-Host "##vso[task.setvariable variable=webAppName]$appServiceName"
+                - task: AzureCLI@2
                   displayName: "Capture Terraform Variables"
-                  workingDirectory: "$(Pipeline.Workspace)/drop_infra"
+                  inputs:
+                    azureSubscription: "$(serviceConnection)"
+                    scriptType: "pscore"
+                    scriptLocation: "inlineScript"
+                    workingDirectory: "$(Pipeline.Workspace)/drop_infra"
+                    inlineScript: |
+                      $appServiceName = terraform output -raw app_service_name
+                      Write-Host "App Service name: $appServiceName"
+                      Write-Host "##vso[task.setvariable variable=webAppName]$appServiceName"
 
                 - task: AzureRmWebAppDeployment@4
                   displayName: "Deploy Azure App Service"
