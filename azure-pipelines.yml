@@ -5,7 +5,7 @@ pool:
   vmImage: "ubuntu-24.04"
 
 variables:
-  solution: "web/JobCompaniesWeb/JobCompaniesWeb.sln"
+  solution: "web/JobCompaniesWeb.sln"
   serviceConnection: "ado-spn-unstacked-jobcompanies-dev-ukwest"
   tfstateResourceGroupName: "rg-unstacked-jobcompanies-dev-ukwest"
   tfstateStorageAccountName: "stjobcompaniesdevukwest"
