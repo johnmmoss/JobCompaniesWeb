@@ -42,14 +42,14 @@ stages:
           - task: PublishPipelineArtifact@1
             displayName: "Publish Artifact (web)"
             inputs:
-              PathtoPublish: "$(build.artifactStagingDirectory)/web.zip"
-              ArtifactName: "drop_web"
+              targetPath: "$(Build.ArtifactStagingDirectory)/web.zip"
+              artifact: "drop_web"
 
           - task: PublishPipelineArtifact@1
             displayName: "Publish Artifact (infra)"
             inputs:
-              PathtoPublish: "$(Build.SourcesDirectory)/infra"
-              ArtifactName: "drop_infra"
+              targetPath: "$(Build.SourcesDirectory)/infra"
+              artifact: "drop_infra"
 
   - stage: Deploy
     dependsOn: Build
