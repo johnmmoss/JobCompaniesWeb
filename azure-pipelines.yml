@@ -1,0 +1,95 @@
+trigger:
+  - main
+
+pool:
+  vmImage: "windows-latest"
+
+variables:
+  solution: "web/JobCompaniesWeb/JobCompaniesWeb.sln"
+  buildPlatform: "Any CPU"
+  buildConfiguration: "Release"
+  serviceConnection: "ado-spn-unstacked-jobcompanies-dev-ukwest"
+  resourceGroupName: "rg-unstacked-jobcompanies-dev-ukwest"
+  webAppName: "app-unstacked-jobcompanies-dev-ukwest"
+  tfstateResourceGroupName: "rg-unstacked-jobcompanies-dev-ukwest"
+  tfstateStorageContainerName: "stjobcompaniesdevukwest"
+
+stages:
+  - stage: Build
+    jobs:
+      - job: BuildJob
+        steps:
+          - task: NuGetToolInstaller@1
+
+          - task: NuGetCommand@2
+            inputs:
+              restoreSolution: "$(solution)"
+
+          - task: VSBuild@1
+            inputs:
+              solution: "$(solution)"
+              msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
+              platform: "$(buildPlatform)"
+              configuration: "$(buildConfiguration)"
+
+          - task: PublishBuildArtifacts@1
+            displayName: "Publish Artifact (web)"
+            inputs:
+              PathtoPublish: "$(build.artifactStagingDirectory)"
+              ArtifactName: "drop_web"
+
+          - task: PublishBuildArtifacts@1
+            displayName: "Publish Artifact (infra)"
+            inputs:
+              PathtoPublish: "infra"
+              ArtifactName: "drop_infra"
+
+  - stage: Deploy
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: DeployInfraAndWeb
+        environment: "dev" 
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: drop_infra
+                - download: current
+                  artifact: drop_web
+
+                - task: TerraformInstaller@1
+                  displayName: "Install Terraform"
+                  inputs:
+                    terraformVersion: "1.7.0"
+
+                - task: TerraformTaskV4@4
+                  displayName: "Terraform Init"
+                  inputs:
+                    provider: "azurerm"
+                    command: "init"
+                    workingDirectory: "$(Pipeline.Workspace)/drop_infra"
+                    backendServiceArm: "$(serviceConnection)"
+                    backendAzureRmResourceGroupName: "$(tfstateResourceGroupName)"
+                    backendAzureRmStorageAccountName: "$(tfstateStorageContainerName)"
+                    backendAzureRmContainerName: "tfstate"
+                    backendAzureRmKey: "terraform.tfstate"
+
+                - task: TerraformTaskV4@4
+                  displayName: "Terraform Apply"
+                  inputs:
+                    provider: "azurerm"
+                    command: "apply"
+                    workingDirectory: "$(Pipeline.Workspace)/drop_infra"
+                    environmentServiceNameAzureRM: "$(serviceConnection)"
+                    commandOptions: "-auto-approve"
+
+                - task: AzureRmWebAppDeployment@4
+                  displayName: "Deploy Azure App Service"
+                  inputs:
+                    ConnectionType: "AzureRM"
+                    azureSubscription: "$(serviceConnection)"
+                    appType: "webApp"
+                    WebAppName: "$(webAppName)"
+                    Package: "$(Pipeline.Workspace)/drop_web/**/*.zip"
