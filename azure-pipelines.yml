@@ -2,51 +2,60 @@ trigger:
   - main
 
 pool:
-  vmImage: "windows-latest"
+  vmImage: "ubuntu-24.04"
 
 variables:
   solution: "web/JobCompaniesWeb/JobCompaniesWeb.sln"
-  buildPlatform: "Any CPU"
   buildConfiguration: "Release"
   serviceConnection: "ado-spn-unstacked-jobcompanies-dev-ukwest"
   resourceGroupName: "rg-unstacked-jobcompanies-dev-ukwest"
   webAppName: "app-unstacked-jobcompanies-dev-ukwest"
   tfstateResourceGroupName: "rg-unstacked-jobcompanies-dev-ukwest"
-  tfstateStorageContainerName: "stjobcompaniesdevukwest"
+  tfstateStorageAccountName: "stjobcompaniesdevukwest"
 
 stages:
   - stage: Build
     jobs:
       - job: BuildJob
         steps:
-          - task: NuGetToolInstaller@1
 
-          - task: NuGetCommand@2
+          - task: UseDotNet@2
+            displayName: 'Use .NET 8'
             inputs:
-              restoreSolution: "$(solution)"
+              version: '8.0.x'
 
-          - task: VSBuild@1
+          - pwsh: dotnet restore $(solution)
+            displayName: 'Restore'
+
+          - pwsh: dotnet build $(solution) --configuration $(buildConfiguration) --no-restore
+            displayName: 'Build'
+
+          - pwsh: dotnet publish $(solution) --configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory)
+            displayName: 'Publish'
+
+          - task: ArchiveFiles@2
+            displayName: 'Compress Web App'
             inputs:
-              solution: "$(solution)"
-              msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
-              platform: "$(buildPlatform)"
-              configuration: "$(buildConfiguration)"
+              rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/publish'
+              includeRootFolder: false
+              archiveType: 'zip'
+              archiveFile: '$(Build.ArtifactStagingDirectory)/web.zip'
+              replaceExistingArchive: true
 
-          - task: PublishBuildArtifacts@1
+          - task: PublishPipelineArtifact@1
             displayName: "Publish Artifact (web)"
             inputs:
               PathtoPublish: "$(build.artifactStagingDirectory)"
               ArtifactName: "drop_web"
 
-          - task: PublishBuildArtifacts@1
+          - task: PublishPipelineArtifact@1
             displayName: "Publish Artifact (infra)"
             inputs:
-              PathtoPublish: "infra"
+              PathtoPublish: "$(Build.SourcesDirectory)/infra"
               ArtifactName: "drop_infra"
 
   - stage: Deploy
     dependsOn: Build
-    condition: succeeded()
     jobs:
       - deployment: DeployInfraAndWeb
         environment: "dev" 
@@ -72,7 +81,7 @@ stages:
                     workingDirectory: "$(Pipeline.Workspace)/drop_infra"
                     backendServiceArm: "$(serviceConnection)"
                     backendAzureRmResourceGroupName: "$(tfstateResourceGroupName)"
-                    backendAzureRmStorageAccountName: "$(tfstateStorageContainerName)"
+                    backendAzureRmStorageAccountName: "$(tfstateStorageAccountName)"
                     backendAzureRmContainerName: "tfstate"
                     backendAzureRmKey: "terraform.tfstate"
 
@@ -84,6 +93,13 @@ stages:
                     workingDirectory: "$(Pipeline.Workspace)/drop_infra"
                     environmentServiceNameAzureRM: "$(serviceConnection)"
                     commandOptions: "-auto-approve"
+
+                - pwsh: |
+                    $appServiceName = terraform output -raw app_service_name
+                    Write-Host "App Service name: $appServiceName"
+                    Write-Host "##vso[task.setvariable variable=webAppName]$appServiceName"
+                  displayName: "Capture Terraform Variables"
+                  workingDirectory: "$(Pipeline.Workspace)/drop_infra"
 
                 - task: AzureRmWebAppDeployment@4
                   displayName: "Deploy Azure App Service"
