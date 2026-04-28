@@ -6,10 +6,7 @@ pool:
 
 variables:
   solution: "web/JobCompaniesWeb/JobCompaniesWeb.sln"
-  buildConfiguration: "Release"
   serviceConnection: "ado-spn-unstacked-jobcompanies-dev-ukwest"
-  resourceGroupName: "rg-unstacked-jobcompanies-dev-ukwest"
-  webAppName: "app-unstacked-jobcompanies-dev-ukwest"
   tfstateResourceGroupName: "rg-unstacked-jobcompanies-dev-ukwest"
   tfstateStorageAccountName: "stjobcompaniesdevukwest"
 
@@ -27,10 +24,10 @@ stages:
           - pwsh: dotnet restore $(solution)
             displayName: 'Restore'
 
-          - pwsh: dotnet build $(solution) --configuration $(buildConfiguration) --no-restore
+          - pwsh: dotnet build $(solution) --configuration Release --no-restore
             displayName: 'Build'
 
-          - pwsh: dotnet publish $(solution) --configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory)
+          - pwsh: dotnet publish $(solution) --configuration Release --no-build --output $(Build.ArtifactStagingDirectory)/publish
             displayName: 'Publish'
 
           - task: ArchiveFiles@2
