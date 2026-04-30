@@ -37,6 +37,12 @@ resource "azurerm_windows_web_app" "web" {
   location            = azurerm_service_plan.plan.location
   service_plan_id     = azurerm_service_plan.plan.id
 
+  app_settings = {
+    # Deploy step sets these settings:
+    "WEBSITE_RUN_FROM_PACKAGE" = "1"
+    "WEBSITE_ENABLE_SYNC_UPDATE_SITE" = "true" 
+  }
+
   identity {
     type = "SystemAssigned"
   }
